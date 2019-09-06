@@ -1,28 +1,23 @@
 package com.stackroute.KafkaRun;
+import com.stackroute.KafkaRun.Domain.SampleObject;
 import org.apache.kafka.clients.producer.*;
-import org.apache.kafka.common.serialization.LongSerializer;
+import org.apache.kafka.common.serialization.*;
+import org.apache.kafka.common.serialization.Serdes;
+
 //import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.common.serialization.StringSerializer;
+
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Serialized;
+
+import org.apache.kafka.streams.KeyValue;
 import org.springframework.boot.SpringApplication;
 
-import java.util.Arrays;
-import java.util.Properties;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit ;
-
-
-
-import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.common.utils.Bytes;
+import java.util.*;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KTable;
-import org.apache.kafka.streams.kstream.Materialized;
-import org.apache.kafka.streams.kstream.Produced;
-import org.apache.kafka.streams.state.KeyValueStore;
-import java.util.Arrays;
+
 
 public class KafkaProducerExample {
 
@@ -32,21 +27,40 @@ public class KafkaProducerExample {
         Properties props = new Properties();
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "wordcount-application");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "0.0.0.0:9092");
-        props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
-        props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
+//        props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
+//        props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.serdeFrom(KafkaRunApplication.class));
+//        Flux
+        Map<String, Object> serdeProps = new HashMap<>();
+
+
+        final Serializer<SampleObject> KafkaRunApplicationSerialzer = new JsonPOJOSerializer<>();
+        serdeProps.put("JsonPOJOClass", SampleObject.class);
+        KafkaRunApplicationSerialzer.configure(serdeProps, false);
+
+
+        final Deserializer<SampleObject> KafkaRunDeserializer = new JsonPOJODeserializer<>();
+        serdeProps.put("JsonPOJOClass", SampleObject.class);
+        KafkaRunDeserializer.configure(serdeProps, false);
+
+//        final Serdes<> KafkaRunApplicationSerDes = ;
+        final Serde<SampleObject> KafkaRunApplicationSerdes = Serdes.serdeFrom(KafkaRunApplicationSerialzer, KafkaRunDeserializer);
 
         StreamsBuilder builder = new StreamsBuilder();
-        KStream<String, String> textLines = builder.stream("TextLinesTopic" +
-                "");
-        KTable<String, Long> wordCounts = textLines
-                .flatMapValues(textLine -> Arrays.asList(textLine.toLowerCase().split("\\W+")))
 
-                .groupBy((key, word) -> {
-                    System.out.println(key + word);
-                    return  word;
-                })
-                .count(Materialized.<String, Long, KeyValueStore<Bytes, byte[]>>as("counts-store"));
-        wordCounts.toStream().to("WordsWithCountsTopic", Produced.with(Serdes.String(), Serdes.Long()));
+        KStream<String, SampleObject> textLines = builder.stream("TextLinesTopic", Consumed.with(Serdes.String(), KafkaRunApplicationSerdes));
+        textLines.map((i, j) -> {
+            System.out.println(i);
+            System.out.println(j);
+            return KeyValue.pair(i, j);
+        });
+//        KTable<String,KafkaRunApplication> wordCounts = textLines
+//                .flatMapValues(textLine -> Arrays.asList(textLine.toLowerCase().split("\\W+")))
+//                .groupBy((key, word) -> {
+//                    System.out.println(key + word);
+//                    return  word;
+//                })
+//                .count(Materialized.<String, Long, KeyValueStore<Bytes, byte[]>>as("counts-store"));
+//        wordCounts.toStream().to("WordsWithCountsTopic", Produced.with(Serdes.String(), Serdes.Long()));
 
         KafkaStreams streams = new KafkaStreams(builder.build(), props);
         streams.start();
